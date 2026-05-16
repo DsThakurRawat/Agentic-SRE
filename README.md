@@ -24,6 +24,13 @@ Welcome to **Agentic SRE**. This is a premium, open-source multi-agent orchestra
 - [Docker](https://docs.docker.com/get-docker/) (required for local mode)
 
 ## 1️⃣ Install Agentic SRE
+
+### Professional (One-Command)
+```bash
+curl -fsSL https://raw.githubusercontent.com/DsThakurRawat/Agentic-SRE/main/scripts/install.sh | bash
+```
+
+### Manual (via pip)
 ```bash
 pip install agentic-sre
 ```
