@@ -25,9 +25,14 @@ Welcome to **Agentic SRE**. This is a premium, open-source multi-agent orchestra
 
 ## 1️⃣ Install Agentic SRE
 
-### Professional (One-Command)
+### Linux / macOS
 ```bash
 curl -fsSL https://raw.githubusercontent.com/DsThakurRawat/Agentic-SRE/main/scripts/install.sh | bash
+```
+
+### Windows (PowerShell)
+```powershell
+irm https://raw.githubusercontent.com/DsThakurRawat/Agentic-SRE/main/scripts/install.ps1 | iex
 ```
 
 ### Manual (via pip)
