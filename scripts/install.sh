@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Agentic SRE Bootstrap Installer
 # Inspired by the OpenSRE installation experience.
+# Usage: curl -fsSL https://raw.githubusercontent.com/DsThakurRawat/Agentic-SRE/main/scripts/install.sh | bash
 
 set -eu
 
 # -- Configuration ------------------------------------------------------------
 BIN_NAME="agentic-sre"
 REPO_URL="https://github.com/DsThakurRawat/Agentic-SRE"
-DEFAULT_INSTALL_CHANNEL="main"
+GIT_TARGET="git+$REPO_URL.git"
 
 # -- UI Helpers ---------------------------------------------------------------
 COLOR_RESET="\033[0m"
@@ -15,25 +16,11 @@ COLOR_CYAN="\033[36m"
 COLOR_GREEN="\033[32m"
 COLOR_RED="\033[31m"
 COLOR_YELLOW="\033[33m"
-SUCCESS_MARK="✓"
-ERROR_MARK="✗"
 
-step() {
-  printf "\n%b%s%b\n" "${COLOR_CYAN}" "$*" "${COLOR_RESET}"
-}
-
-success() {
-  printf "%b%s %s%b\n" "${COLOR_GREEN}" "${SUCCESS_MARK}" "$*" "${COLOR_RESET}"
-}
-
-warn() {
-  printf "%b! %s%b\n" "${COLOR_YELLOW}" "$*" "${COLOR_RESET}"
-}
-
-fail() {
-  printf "%b%s %s%b\n" "${COLOR_RED}" "${ERROR_MARK}" "$*" "${COLOR_RESET}"
-  exit 1
-}
+step()    { printf "\n%b%s%b\n" "${COLOR_CYAN}" "$*" "${COLOR_RESET}"; }
+success() { printf "%b✓ %s%b\n" "${COLOR_GREEN}" "$*" "${COLOR_RESET}"; }
+warn()    { printf "%b! %s%b\n" "${COLOR_YELLOW}" "$*" "${COLOR_RESET}"; }
+fail()    { printf "%b✗ %s%b\n" "${COLOR_RED}" "$*" "${COLOR_RESET}"; exit 1; }
 
 # -- Help ---------------------------------------------------------------------
 usage() {
@@ -43,38 +30,21 @@ Usage: install.sh [--main] [--version <version>]
 Installs the Agentic SRE CLI.
 
 Options:
-  --main                Install the rolling build published from the main branch.
+  --main                Install the rolling build from the main branch.
   --version <version>   Install a specific release version.
   -h, --help            Show this help text.
 
 Examples:
-  curl -fsSL https://agentic-sre.ai/install | bash
-  curl -fsSL https://agentic-sre.ai/install | bash -s -- --main
+  curl -fsSL https://raw.githubusercontent.com/DsThakurRawat/Agentic-SRE/main/scripts/install.sh | bash
+  curl -fsSL https://raw.githubusercontent.com/DsThakurRawat/Agentic-SRE/main/scripts/install.sh | bash -s -- --main
 EOF
 }
 
-# -- Detect Python 3.13 -------------------------------------------------------
-check_python() {
-  PYTHON=""
-  for candidate in python3.13 python3 python; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-      VER="$($candidate --version 2>&1 | awk '{print $2}')"
-      if [[ "$VER" == 3.13* ]]; then
-        PYTHON="$candidate"
-        return 0
-      fi
-    fi
-  done
-  return 1
-}
-
-# -- Main Logic ---------------------------------------------------------------
-INSTALL_CHANNEL="$DEFAULT_INSTALL_CHANNEL"
+# -- Parse Arguments ----------------------------------------------------------
 REQUESTED_VERSION=""
-
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --main) INSTALL_CHANNEL="main"; shift ;;
+    --main)    shift ;;
     --version) [ "$#" -ge 2 ] || fail "--version requires a value."; REQUESTED_VERSION="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) shift ;;
@@ -84,44 +54,45 @@ done
 printf "\n%b%s%b\n" "\033[1m${COLOR_CYAN}" "Agentic SRE Installer" "${COLOR_RESET}"
 echo "The flagship orchestration engine for Autonomous SRE."
 
-step "[1/3] Checking environment..."
-if check_python; then
-  success "Found Python $VER"
+# -- [1/3] Install uv ---------------------------------------------------------
+step "[1/3] Checking for uv (fast Python package manager)..."
+
+if ! command -v uv >/dev/null 2>&1; then
+  warn "uv not found. Installing uv..."
+  curl -fsSL https://astral.sh/uv/install.sh | sh
+  # Add uv to current PATH
+  export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+fi
+
+if command -v uv >/dev/null 2>&1; then
+  success "uv is available"
 else
-  fail "Python 3.13 is required. Please install it before running this script."
+  fail "Could not install uv. Please install it manually: https://docs.astral.sh/uv/getting-started/installation/"
 fi
 
-# Ensure pipx
-if ! command -v pipx >/dev/null 2>&1; then
-  step "Installing pipx..."
-  "$PYTHON" -m pip install --user pipx >/dev/null 2>&1
-  "$PYTHON" -m pipx ensurepath >/dev/null 2>&1
-  export PATH="$HOME/.local/bin:$PATH"
-fi
-
+# -- [2/3] Resolve target -----------------------------------------------------
 step "[2/3] Resolving installation target..."
-if [ -f "pyproject.toml" ] && grep -q "name = \"agentic-sre\"" pyproject.toml; then
+if [ -n "$REQUESTED_VERSION" ]; then
+  INSTALL_TARGET="${BIN_NAME}==${REQUESTED_VERSION}"
+  success "Installing version $REQUESTED_VERSION"
+elif [ -f "pyproject.toml" ] && grep -q "name = \"agentic-sre\"" pyproject.toml; then
   INSTALL_TARGET="."
-  info_msg="Installing from local source"
-elif [ "$INSTALL_CHANNEL" = "main" ]; then
-  INSTALL_TARGET="git+$REPO_URL.git"
-  info_msg="Installing latest build from main"
-elif [ -n "$REQUESTED_VERSION" ]; then
-  INSTALL_TARGET="agentic-sre==$REQUESTED_VERSION"
-  info_msg="Installing version $REQUESTED_VERSION"
+  success "Installing from local source"
 else
-  INSTALL_TARGET="agentic-sre"
-  info_msg="Installing stable release"
+  INSTALL_TARGET="$GIT_TARGET"
+  success "Installing latest build from GitHub"
 fi
-success "$info_msg"
 
+# -- [3/3] Install Agentic SRE ------------------------------------------------
 step "[3/3] Installing Agentic SRE..."
-if pipx install "$INSTALL_TARGET" --python "$PYTHON" --force >/dev/null 2>&1; then
+
+if uv tool install "$INSTALL_TARGET" --force 2>&1; then
+  echo
   success "Agentic SRE successfully installed!"
   echo
   printf "Next steps:\n"
-  printf "  1. Run '${BIN_NAME}' to start the configuration wizard.\n"
-  printf "  2. Visit ${REPO_URL} for more info.\n\n"
+  printf "  1. Run '%s' to start the configuration wizard.\n" "$BIN_NAME"
+  printf "  2. Visit %s for more info.\n\n" "$REPO_URL"
 else
-  fail "Installation failed. Please check your network and Python setup."
+  fail "Installation failed. Run with 'bash -x' for debug output."
 fi
