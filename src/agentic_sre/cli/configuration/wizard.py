@@ -12,18 +12,17 @@ from agentic_sre.cli.configuration.options import (
     DEPLOYMENT_PLATFORM_AWS,
     DEPLOYMENT_PLATFORM_CHOICES,
     LEGACY_SELECTION_ENV_KEYS,
+    MODEL_CHOICES_ANTHROPIC,
+    MODEL_CHOICES_GEMINI,
+    MODEL_CHOICES_GROQ,
+    MODEL_CHOICES_OPENAI,
     MODEL_PROVIDER_ANTHROPIC,
+    MODEL_PROVIDER_CHOICES,
+    MODEL_PROVIDER_GEMINI,
     MODEL_PROVIDER_GROQ,
     MODEL_PROVIDER_OLLAMA,
     MODEL_PROVIDER_OPENAI,
-    MODEL_PROVIDER_GEMINI,
     MODEL_PROVIDER_OPENROUTER,
-    MODEL_PROVIDER_BEDROCK,
-    MODEL_PROVIDER_CHOICES,
-    MODEL_CHOICES_ANTHROPIC,
-    MODEL_CHOICES_GROQ,
-    MODEL_CHOICES_OPENAI,
-    MODEL_CHOICES_GEMINI,
     NOTIFICATION_PLATFORM_CHOICES,
     NOTIFICATION_PLATFORM_SLACK,
 )
@@ -192,21 +191,13 @@ def _run_config_wizard(
     return config
 
 
-def _configure_model_provider(
-    config: CliConfig,
+def _prompt_model_credentials(
+    model_provider: str,
     env_values: dict[str, str],
     force_reconfigure: bool,
     updates: dict[str, str],
-    allow_back: bool = False,
-) -> str:
-    """Prompt for model provider and required credentials."""
-    model_provider = _prompt_choice(
-        "Model provider:",
-        config.integrations.model_provider,
-        force_reconfigure,
-        MODEL_PROVIDER_CHOICES,
-        allow_back=allow_back,
-    )
+) -> None:
+    """Prompt for credentials required by the selected model provider."""
     if model_provider == MODEL_PROVIDER_ANTHROPIC:
         updates["ANTHROPIC_API_KEY"] = _prompt_secret(
             "Anthropic API key:",
@@ -243,35 +234,27 @@ def _configure_model_provider(
             env_values.get("OLLAMA_HOST") or "http://localhost:11434",
             force_reconfigure,
         )
-    elif model_provider == MODEL_PROVIDER_BEDROCK:
-        # Bedrock typically uses AWS credentials which are configured in the deployment step,
-        # but we might want to confirm the model ID here.
-        pass
 
-    # Clear other keys to keep env clean
-    for provider, key in [
-        (MODEL_PROVIDER_ANTHROPIC, "ANTHROPIC_API_KEY"),
-        (MODEL_PROVIDER_OPENAI, "OPENAI_API_KEY"),
-        (MODEL_PROVIDER_GROQ, "GROQ_API_KEY"),
-        (MODEL_PROVIDER_GEMINI, "GOOGLE_API_KEY"),
-        (MODEL_PROVIDER_OPENROUTER, "OPENROUTER_API_KEY"),
-    ]:
-        if model_provider != provider:
-            _clear_env_keys(updates, key)
 
-    # Prompt for the specific model ID
+def _prompt_model_id(
+    model_provider: str,
+    env_values: dict[str, str],
+    config: CliConfig,
+    force_reconfigure: bool,
+    updates: dict[str, str],
+) -> None:
+    """Prompt for the specific model ID for the selected provider."""
     model_choices_map = {
         MODEL_PROVIDER_ANTHROPIC: MODEL_CHOICES_ANTHROPIC,
         MODEL_PROVIDER_GROQ: MODEL_CHOICES_GROQ,
         MODEL_PROVIDER_OPENAI: MODEL_CHOICES_OPENAI,
         MODEL_PROVIDER_GEMINI: MODEL_CHOICES_GEMINI,
     }
-    
+
     current_model = env_values.get("MODEL") or config.integrations.model
     choices = model_choices_map.get(model_provider)
-    
+
     if choices:
-        # Add 'Custom' option to the list
         all_choices = list(choices) + [("Custom (type your own)", "custom")]
         selected_model = _prompt_choice(
             "Select model:",
@@ -287,12 +270,43 @@ def _configure_model_provider(
             )
         updates["MODEL"] = selected_model
     else:
-        # For providers without presets (Ollama, OpenRouter, Bedrock)
         updates["MODEL"] = _prompt_text(
             "Model ID (e.g. ollama:llama3, bedrock:anthropic.claude-v2, etc.):",
             current_model,
             force_reconfigure,
         )
+
+
+def _configure_model_provider(
+    config: CliConfig,
+    env_values: dict[str, str],
+    force_reconfigure: bool,
+    updates: dict[str, str],
+    allow_back: bool = False,
+) -> str:
+    """Prompt for model provider and required credentials."""
+    model_provider = _prompt_choice(
+        "Model provider:",
+        config.integrations.model_provider,
+        force_reconfigure,
+        MODEL_PROVIDER_CHOICES,
+        allow_back=allow_back,
+    )
+
+    _prompt_model_credentials(model_provider, env_values, force_reconfigure, updates)
+
+    # Clear unused provider keys to keep env clean
+    for provider, key in [
+        (MODEL_PROVIDER_ANTHROPIC, "ANTHROPIC_API_KEY"),
+        (MODEL_PROVIDER_OPENAI, "OPENAI_API_KEY"),
+        (MODEL_PROVIDER_GROQ, "GROQ_API_KEY"),
+        (MODEL_PROVIDER_GEMINI, "GOOGLE_API_KEY"),
+        (MODEL_PROVIDER_OPENROUTER, "OPENROUTER_API_KEY"),
+    ]:
+        if model_provider != provider:
+            _clear_env_keys(updates, key)
+
+    _prompt_model_id(model_provider, env_values, config, force_reconfigure, updates)
 
     return model_provider
 
