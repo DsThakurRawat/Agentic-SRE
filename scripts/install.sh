@@ -7,7 +7,7 @@ set -eu
 # -- Configuration ------------------------------------------------------------
 BIN_NAME="agentic-sre"
 REPO_URL="https://github.com/DsThakurRawat/Agentic-SRE"
-DEFAULT_INSTALL_CHANNEL="release"
+DEFAULT_INSTALL_CHANNEL="main"
 
 # -- UI Helpers ---------------------------------------------------------------
 COLOR_RESET="\033[0m"
