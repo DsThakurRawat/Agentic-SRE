@@ -34,6 +34,12 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+agentic_sre = [
+    "core/prompts/*.txt",
+    "eval/**/test_cases/*.json",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.3.4",
